@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifySignature } from '@/lib/cryptoUtils'; 
-import { db } from '@/lib/firebaseAdmin'; 
+import { getDb, verifyToken } from '@/lib/firebaseAdmin';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Initialize Gemini
@@ -60,6 +60,7 @@ export async function POST(request: Request) {
     }
 
     // 4. SAVE TO FIRESTORE (Only if Math + AI Passed)
+    const db = getDb()
     await db.collection('complaints').add({
       content: message,
       signature: signature,
