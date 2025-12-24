@@ -4,6 +4,7 @@ import { db } from '@/lib/firebaseAdmin';
 import admin from 'firebase-admin';
 import { KEYS } from '@/lib/cryptoUtils'; // Centralized Keys import
 
+export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
