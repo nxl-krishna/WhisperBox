@@ -1,32 +1,41 @@
 import admin from 'firebase-admin';
 
-// 1. Initialize sirf tab karein jab zarurat ho aur keys maujood hon
-if (!admin.apps.length) {
+// Helper function jo Firebase ko safe tarike se initialize karega
+function initAdmin() {
+  // Agar already initialized hai, to wapas mat karo
+  if (admin.apps.length > 0) {
+    return;
+  }
+
   const privateKey = process.env.FIREBASE_PRIVATE_KEY;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const projectId = process.env.FIREBASE_PROJECT_ID;
 
-  // Build time pe ye keys undefined ho sakti hain
+  // Sirf tab init karo jab keys maujood hon (Runtime pe)
   if (privateKey && clientEmail && projectId) {
     try {
       admin.initializeApp({
         credential: admin.credential.cert({
           projectId,
           clientEmail,
-          // Vercel newline fix
           privateKey: privateKey.replace(/\\n/g, '\n'),
         }),
       });
+      console.log("🔥 Firebase Admin Initialized");
     } catch (error) {
-      console.error('Firebase Admin Init Error:', error);
+      console.error("Firebase Admin Init Error:", error);
     }
-  } else {
-    // Ye message build logs mein dikhega, par crash nahi karega
-    console.warn("⚠️ Firebase Env Vars missing. Skipping initialization for build.");
   }
 }
 
-// 2. SAFE EXPORT (Sabse Important Part)
-// Agar app initialize nahi hua (Build time), toh 'db' ko crash mat hone do.
-// Hum use 'any' cast kar rahe hain taaki TypeScript shor na machaye.
-export const db = (admin.apps.length > 0 ? admin.firestore() : {}) as admin.firestore.Firestore;
+// 1. Export DB Function (Lazy Load)
+export const getDb = () => {
+  initAdmin(); // Pehle init karega
+  return admin.firestore(); // Phir DB dega
+};
+
+// 2. Export Auth Function (Lazy Load)
+export const verifyToken = async (token: string) => {
+  initAdmin(); // Pehle init karega
+  return admin.auth().verifyIdToken(token);
+};

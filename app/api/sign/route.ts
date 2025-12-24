@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import bigInt from "big-integer";
-import { db } from '@/lib/firebaseAdmin';
+import { getDb, verifyToken } from '@/lib/firebaseAdmin';
 import admin from 'firebase-admin';
 import { KEYS } from '@/lib/cryptoUtils'; // Centralized Keys import
 
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     // Ye confirm karta hai ki request kisi valid logged-in user se aayi hai.
     let decodedToken;
     try {
-      decodedToken = await admin.auth().verifyIdToken(token);
+      decodedToken = await verifyToken(token);
     } catch (authError) {
       return NextResponse.json({ error: 'Unauthorized: Invalid Token' }, { status: 401 });
     }
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     }
     */
 
-    // 3. PREVENT DOUBLE VOTING (Database Check)
+    const db = getDb();
     const userRef = db.collection('voters').doc(userId);
     const userDoc = await userRef.get();
 
