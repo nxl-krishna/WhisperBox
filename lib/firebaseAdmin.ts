@@ -1,10 +1,13 @@
 import admin from 'firebase-admin';
-import serviceAccountKey from '../app/serviceAccountKey.json'; 
 
 if (!admin.apps.length) {
   admin.initializeApp({
-    // Yahan humne 'as admin.ServiceAccount' add kiya hai casting ke liye
-    credential: admin.credential.cert(serviceAccountKey as admin.ServiceAccount),
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      // Ye replace function Vercel ke liye zaroori hai
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    }),
   });
 }
 
