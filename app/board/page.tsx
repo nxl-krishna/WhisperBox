@@ -19,7 +19,7 @@ export default function Board() {
     try {
       const result = await signInWithPopup(auth, provider);
       const email = result.user.email;
-      
+
       // Check Firestore if this email is a Board Member
       const q = query(collection(db, "board_members"), where("email", "==", email));
       const querySnapshot = await getDocs(q);
@@ -44,11 +44,11 @@ export default function Board() {
     setSelectedBranch(branch);
     try {
       const q = query(
-        collection(db, "complaints"), 
+        collection(db, "complaints"),
         where("branch", "==", branch),
         orderBy("timestamp", "desc")
       );
-      
+
       const querySnapshot = await getDocs(q);
       const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setComplaints(data);
@@ -64,9 +64,9 @@ export default function Board() {
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white">
         <h1 className="text-3xl font-bold mb-4 text-red-500">Restricted Area 🚧</h1>
         <p className="mb-6 text-gray-400">Only Board Members can access this dashboard.</p>
-        
+
         {error && <p className="text-red-400 bg-red-900/20 p-2 rounded mb-4">{error}</p>}
-        
+
         <button onClick={handleLogin} className="bg-white text-black px-6 py-2 rounded font-bold hover:bg-gray-200">
           Board Member Login
         </button>
@@ -96,9 +96,8 @@ export default function Board() {
             <button
               key={b}
               onClick={() => fetchComplaints(b)}
-              className={`px-4 py-2 rounded text-sm font-bold transition ${
-                selectedBranch === b ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-              }`}
+              className={`px-4 py-2 rounded text-sm font-bold transition ${selectedBranch === b ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
             >
               {b}
             </button>
@@ -121,6 +120,17 @@ export default function Board() {
                   <span className="text-gray-500 text-xs">{new Date(c.timestamp?.seconds * 1000).toLocaleDateString()}</span>
                 </div>
                 <p className="text-gray-200 text-lg mb-4">"{c.content}"</p>
+                {c.imageUrl && (
+                  <div className="mb-4">
+                    <img
+                      src={c.imageUrl}
+                      alt="Evidence"
+                      className="w-full h-48 object-cover rounded border border-gray-600 cursor-pointer hover:opacity-90"
+                      onClick={() => window.open(c.imageUrl, '_blank')} // Click to zoom
+                    />
+                    <span className="text-xs text-gray-500">Click image to view full size</span>
+                  </div>
+                )}
                 <div className="border-t border-gray-700 pt-4 mt-2">
                   <p className="text-xs text-gray-500 font-mono break-all">
                     <span className="text-green-500">Signature:</span> {c.signature.substring(0, 20)}...

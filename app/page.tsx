@@ -3,14 +3,28 @@ import { useState } from 'react';
 import { signInWithPopup, signOut } from "firebase/auth";
 import { auth, provider } from "../lib/firebaseClient"; 
 import { messageToHashInt, generateBlindingFactor, blindMessage, unblindSignature } from '@/lib/cryptoUtils';
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { storage } from "../lib/firebaseClient";
+import { v4 as uuidv4 } from 'uuid';
+import imageCompression from 'browser-image-compression';
 
 
 const BRANCHES = ["CSE", "EE", "ME", "Civil", "Chemical", "General Admin"];
+const convertToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+  };
 
 export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [complaint, setComplaint] = useState('');
   const [branch, setBranch] = useState(BRANCHES[0]);
+  const [image, setImage] = useState<File | null>(null);
+
   // UI States
   const [status, setStatus] = useState('Idle');
   const [statusType, setStatusType] = useState<'normal' | 'error' | 'success'>('normal');
@@ -106,14 +120,41 @@ export default function Home() {
   // 3. Submit (Groq AI Check)
   const handleSubmit = async () => {
     setStatus('🤖 AI Checking content for toxicity...');
+    setStatus('📤 Uploading proof & checking content...');
     setStatusType('normal');
     setIsLoading(true);
 
-    try {
+   try {
+      let imageString = null;
+
+      // Agar image select ki hai, toh compress karke text banao
+      if (image) {
+        console.log("Original size:", image.size / 1024 / 1024, "MB");
+        
+        const options = {
+          maxSizeMB: 0.8, // 1MB se kam rakhna zaroori hai Firestore ke liye
+          maxWidthOrHeight: 1024,
+          useWebWorker: true,
+        };
+        
+        try {
+          // Compress
+          const compressedFile = await imageCompression(image, options);
+          console.log("Compressed size:", compressedFile.size / 1024 / 1024, "MB");
+          
+          // Convert to Text (Base64)
+          imageString = await convertToBase64(compressedFile);
+        } catch (error) {
+          console.error("Compression Error:", error);
+          setStatus("❌ Image too large or invalid format.");
+          setIsLoading(false);
+          return;
+        }
+      }
       const res = await fetch('/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: complaint, signature: finalProof,branch: branch }),
+        body: JSON.stringify({ message: complaint, signature: finalProof,branch: branch,imageUrl: imageString }),
       });
 
       const data = await res.json();
@@ -127,6 +168,7 @@ export default function Home() {
         setStatusType('success');
         setComplaint(''); // Clear form
         setFinalProof(''); // Reset proof
+        setImage(null);// Reset image
         // Optional: Reset R factor if needed
       }
 
@@ -189,6 +231,12 @@ export default function Home() {
             onChange={(e) => setComplaint(e.target.value)}
             disabled={!!finalProof || isLoading} 
           />
+          <input 
+                type="file" 
+                accept="image/*"
+                className="mb-4"
+                onChange={(e) => { if (e.target.files?.[0]) setImage(e.target.files[0]); }}
+            />
 
           <div className="flex gap-4">
             {/* BUTTON 1: GET SIGNATURE */}

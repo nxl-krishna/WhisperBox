@@ -11,6 +11,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "big-integer": "^1.6.52",
+    "browser-image-compression": "^2.0.2",
     "firebase": "^12.7.0",
     "firebase-admin": "^13.6.0",
     "groq-sdk": "^0.37.0",
@@ -19,7 +20,8 @@
     "node-rsa": "^1.1.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "secure-random": "^1.1.2"
+    "secure-random": "^1.1.2",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

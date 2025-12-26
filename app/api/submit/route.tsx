@@ -10,7 +10,7 @@ const groq = new Groq({ apiKey: process.env.NEXT_PUBLIC_GROQ_API_KEY});
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { message, signature,branch } = body;
+    const { message, signature,branch,imageUrl } = body;
 
     // 1. DATA CHECK
     if (!message || !signature || !branch) {
@@ -67,6 +67,7 @@ export async function POST(request: Request) {
       content: message,
       signature: signature,
       branch: branch,
+      imageUrl: imageUrl || null,
       timestamp: new Date(),
       status: 'Pending Review',
       aiProvider: 'Groq'
