@@ -1,8 +1,6 @@
 import admin from 'firebase-admin';
 
-// Helper function jo Firebase ko safe tarike se initialize karega
 function initAdmin() {
-  // Agar already initialized hai, to wapas mat karo
   if (admin.apps.length > 0) {
     return;
   }
@@ -11,31 +9,47 @@ function initAdmin() {
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const projectId = process.env.FIREBASE_PROJECT_ID;
 
-  // Sirf tab init karo jab keys maujood hon (Runtime pe)
   if (privateKey && clientEmail && projectId) {
     try {
+      // --- KEY CLEANING LOGIC ---
+      let formattedKey = privateKey;
+
+      // 1. Agar key quotes "..." mein band hai (extra safety)
+      if (formattedKey.startsWith('"') && formattedKey.endsWith('"')) {
+        formattedKey = formattedKey.slice(1, -1);
+      }
+
+      // 2. Convert literal '\n' characters to actual newlines
+      formattedKey = formattedKey.replace(/\\n/g, '\n');
+
+      // --- DEBUGGING (Sirf first line print karega security ke liye) ---
+      console.log("🔍 Checking Private Key Format:");
+      console.log(`   Starts with Header? ${formattedKey.startsWith('-----BEGIN PRIVATE KEY-----')}`);
+      console.log(`   Ends with Footer?   ${formattedKey.includes('-----END PRIVATE KEY-----')}`);
+      console.log(`   First 20 chars:     ${formattedKey.substring(0, 20)}...`);
+
       admin.initializeApp({
         credential: admin.credential.cert({
           projectId,
           clientEmail,
-          privateKey: privateKey.replace(/\\n/g, '\n'),
+          privateKey: formattedKey,
         }),
       });
-      console.log("🔥 Firebase Admin Initialized");
+      console.log("🔥 Firebase Admin Initialized Successfully");
     } catch (error) {
-      console.error("Firebase Admin Init Error:", error);
+      console.error("❌ Firebase Admin Init Error:", error);
     }
+  } else {
+    console.warn("⚠️ Firebase Env Vars missing. Skipping initialization.");
   }
 }
 
-// 1. Export DB Function (Lazy Load)
 export const getDb = () => {
-  initAdmin(); // Pehle init karega
-  return admin.firestore(); // Phir DB dega
+  initAdmin();
+  return admin.firestore();
 };
 
-// 2. Export Auth Function (Lazy Load)
 export const verifyToken = async (token: string) => {
-  initAdmin(); // Pehle init karega
+  initAdmin();
   return admin.auth().verifyIdToken(token);
 };

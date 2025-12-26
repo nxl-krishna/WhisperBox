@@ -1,74 +1,78 @@
+// app/api/submit/route.ts
 import { NextResponse } from 'next/server';
 import { verifySignature } from '@/lib/cryptoUtils'; 
-import { getDb, verifyToken } from '@/lib/firebaseAdmin';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { getDb } from '@/lib/firebaseAdmin';
+import Groq from "groq-sdk";
 
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY|| "");
+// Initialize Groq
+const groq = new Groq({ apiKey: process.env.NEXT_PUBLIC_GROQ_API_KEY});
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { message, signature } = body;
+    const { message, signature,branch } = body;
 
     // 1. DATA CHECK
-    if (!message || !signature) {
+    if (!message || !signature || !branch) {
       return NextResponse.json({ error: 'Missing data' }, { status: 400 });
     }
 
-    // 2. MATHEMATICAL VERIFICATION (Crypto Check)
-    // Pehle ye karte hain kyunki ye fast aur free hai
+    // 2. CRYPTO CHECK
     const isValid = verifySignature(message, signature);
-    
     if (!isValid) {
-      return NextResponse.json({ error: 'Invalid Signature! You are not authorized.' }, { status: 401 });
+      return NextResponse.json({ error: 'Invalid Signature!' }, { status: 401 });
     }
 
-    // 3. AI CONTENT MODERATION (Gemini Check) 🤖
+    // 3. AI MODERATION (USING GROQ / LLAMA 3) 🚀
+    let analysis = "SAFE";
+    
     try {
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+      const completion = await groq.chat.completions.create({
+        messages: [
+          {
+            role: "system",
+            content: "You are a content moderator. Check the text for hate speech, severe profanity, or toxicity. Reply STRICTLY with 'SAFE' or 'UNSAFE'."
+          },
+          {
+            role: "user",
+            content: message,
+          },
+        ],
+        model: "llama-3.3-70b-versatile", // Super fast & Free tier friendly
+      });
 
-      // Hum AI ko strict instruction de rahe hain
-      const prompt = `
-        You are a content moderator for a student grievance system. 
-        Analyze the following text for hate speech, severe profanity, harassment, or explicit toxicity.
-        
-        Text: "${message}"
-        
-        If the text is SAFE and acceptable for a public board, reply strictly with one word: "SAFE".
-        If the text contains abuse, hate speech, or severe toxicity, reply strictly with one word: "UNSAFE".
-      `;
+      analysis = completion.choices[0]?.message?.content?.trim().toUpperCase() || "SAFE";
+      console.log(`[Groq AI] Verdict: ${analysis}`);
+      // app/api/submit/route.tsx
 
-      const result = await model.generateContent(prompt);
-      const response = result.response;
-      const analysis = response.text().trim().toUpperCase();
-
-      console.log(`[AI Moderator] Message: "${message}" -> Verdict: ${analysis}`);
-
-      if (analysis.includes("UNSAFE")) {
-        return NextResponse.json({ 
-          error: 'Content Flagged: Your message violates community guidelines (Abusive/Toxic).' 
-        }, { status: 400 });
-      }
+    if (analysis.includes("UNSAFE")) {
+      return NextResponse.json({ 
+        // Ye message frontend pe dikhega 👇
+        error: '⚠️ Request Rejected: Abusive language or toxic content is not allowed.' 
+      }, { status: 400 });
+    }
 
     } catch (aiError) {
-      console.error("AI Check Failed:", aiError);
-      // Agar AI fail ho jaye (quota/network), toh kya karein? 
-      // Option A: Allow kar do (Fail Open)
-      // Option B: Block kar do (Fail Closed) - Currently Allowing with warning for testing
-      console.warn("Skipping AI check due to error.");
+      console.error("Groq Check Failed:", aiError);
+      // Fail Open: Agar API fail hui to allow kar do temporarily
     }
 
-    // 4. SAVE TO FIRESTORE (Only if Math + AI Passed)
-    const db = getDb()
+    if (analysis.includes("UNSAFE")) {
+      return NextResponse.json({ error: 'Content Flagged: Toxic content detected.' }, { status: 400 });
+    }
+
+    // 4. SAVE TO DB
+    const db = getDb();
     await db.collection('complaints').add({
       content: message,
       signature: signature,
+      branch: branch,
       timestamp: new Date(),
-      status: 'Pending Review'
+      status: 'Pending Review',
+      aiProvider: 'Groq'
     });
 
-    return NextResponse.json({ success: true, message: 'Complaint lodged anonymously!' });
+    return NextResponse.json({ success: true });
 
   } catch (error: any) {
     console.error("Server Error:", error);

@@ -1,49 +1,75 @@
 'use client';
 import { useState } from 'react';
 import { signInWithPopup, signOut } from "firebase/auth";
-import { auth, provider } from "../lib/firebaseClient";
+import { auth, provider } from "../lib/firebaseClient"; 
 import { messageToHashInt, generateBlindingFactor, blindMessage, unblindSignature } from '@/lib/cryptoUtils';
+
+
+const BRANCHES = ["CSE", "EE", "ME", "Civil", "Chemical", "General Admin"];
 
 export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [complaint, setComplaint] = useState('');
+  const [branch, setBranch] = useState(BRANCHES[0]);
+  // UI States
   const [status, setStatus] = useState('Idle');
+  const [statusType, setStatusType] = useState<'normal' | 'error' | 'success'>('normal');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Crypto States
   const [finalProof, setFinalProof] = useState<string>('');
   const [rFactor, setRFactor] = useState<any>(null);
 
-  // 1. Login Function
+  // 1. STRICT LOGIN FUNCTION (IITGN Only)
   const handleLogin = async () => {
-    // Button disable karne ke liye status set kar rahe hain
-    setStatus("Opening Login Popup...");
+    setStatus("Waiting for Google Login...");
+    setStatusType('normal');
+    setIsLoading(true); // Lock buttons
     
     try {
       const result = await signInWithPopup(auth, provider);
+      const email = result.user.email;
+
+      // 🛑 SECURITY CHECK: Domain Validation
+      if (!email || !email.endsWith('@iiitvadodara.ac.in')) {
+        await signOut(auth); // Immediately kick out unauthorized user
+        setUser(null);
+        setStatus("❌ Access Denied: Only @iiitvadodara.ac.in emails are allowed!");
+        setStatusType('error');
+        setIsLoading(false);
+        return; // Stop execution here
+      }
+
+      // Agar domain sahi hai:
       setUser(result.user);
-      setStatus("Logged in as: " + result.user.email);
+      setStatus("✅ Welcome! Logged in as: " + email);
+      setStatusType('success');
+
     } catch (e: any) {
-      // SPECIFIC ERROR HANDLING
-      if (e.code === 'auth/cancelled-popup-request') {
-        console.log("Login popup closed by user.");
-        setStatus("Login cancelled. Try again.");
-      } else if (e.code === 'auth/popup-closed-by-user') {
-        console.log("Login popup closed manually.");
-        setStatus("Login cancelled.");
+      // Handle Popup Close explicitly
+      if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') {
+        setStatus("Login Cancelled by User.");
+        setStatusType('normal');
       } else {
         console.error("Login Error:", e);
         setStatus("Login Failed: " + e.message);
+        setStatusType('error');
       }
+    } finally {
+      setIsLoading(false); // Unlock buttons
     }
   };
 
-  // 2. Sign (Get Ticket) - Now sends Token!
+  // 2. Sign (Get Ticket)
   const handleSign = async () => {
     if (!user) return alert("Please login first!");
-    setStatus('Blinding & Requesting Signature...');
+    
+    setStatus('🔐 Encrypting & Requesting Blind Signature...');
+    setStatusType('normal');
+    setIsLoading(true);
     
     try {
-      // Get fresh token from Firebase
       const token = await user.getIdToken(); 
-      
       const messageInt = messageToHashInt(complaint);
       const r = generateBlindingFactor();
       setRFactor(r);
@@ -52,104 +78,159 @@ export default function Home() {
       
       const res = await fetch('/api/sign', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           blinded_message: blindedMessage.toString(), 
-          token: token // Sending token for verification
+          token: token 
         }),
       });
       
       const data = await res.json();
       
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error || "Signing Failed");
 
       const signature = unblindSignature(data.blinded_signature, r);
       setFinalProof(signature.toString());
-      setStatus('Success! You have a digital signature. You can now post anonymously.');
       
-      // OPTIONAL: Logout user automatically to encourage anonymity for next step
-      // signOut(auth); setUser(null); 
-
+      setStatus('✅ Signature Received! Your identity is now hidden.');
+      setStatusType('success');
+      
     } catch (e: any) {
-      setStatus('Error: ' + e.message);
+      setStatus('❌ Signing Error: ' + e.message);
+      setStatusType('error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // 3. Submit (Unchanged logic, but now pure anonymous)
+  // 3. Submit (Groq AI Check)
   const handleSubmit = async () => {
-    setStatus('Submitting Anonymously...');
-    const res = await fetch('/api/submit', {
-      method: 'POST',
-      body: JSON.stringify({ message: complaint, signature: finalProof }),
-    });
+    setStatus('🤖 AI Checking content for toxicity...');
+    setStatusType('normal');
+    setIsLoading(true);
 
-    if (res.ok) {
-      setStatus('Complaint posted successfully! 🚀');
-      setComplaint('');
-      setFinalProof('');
-    } else {
-      setStatus('Submission Failed.');
+    try {
+      const res = await fetch('/api/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: complaint, signature: finalProof,branch: branch }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        // AI Rejection Message here
+        setStatus(`⛔ Blocked: ${data.error}`); 
+        setStatusType('error');
+      } else {
+        setStatus('🚀 Complaint posted successfully to the Board!');
+        setStatusType('success');
+        setComplaint(''); // Clear form
+        setFinalProof(''); // Reset proof
+        // Optional: Reset R factor if needed
+      }
+
+    } catch (e: any) {
+      setStatus('❌ Network Error: ' + e.message);
+      setStatusType('error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-gray-900 text-white font-sans">
       <h1 className="text-4xl font-bold mb-2 text-blue-400">Whisper-Box 🔒</h1>
-      <a href="/board" className="text-blue-300 hover:text-blue-100 underline text-sm">
-    View Public Board &rarr;
-  </a>
-      <p className="mb-8 text-gray-400">IITGN Anonymous Grievance System</p>
+      
+      <a href="/board" className="text-blue-300 hover:text-blue-100 underline text-sm mb-6">
+        View Public Board &rarr;
+      </a>
+      
+      <p className="mb-8 text-gray-400">Acropolis Anonymous Grievance System</p>
       
       {/* Login Section */}
       {!user ? (
         <button 
-  onClick={handleLogin}
-  // Agar status "Opening..." hai, toh button disable rahega
-  disabled={status.includes("Opening") || status.includes("Loading")}
-  className={`bg-white text-gray-900 px-6 py-3 rounded font-bold flex items-center gap-2 
-    ${status.includes("Opening") ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-200'}`}
->
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6"/>
-          Sign in with IITGN ID
+          onClick={handleLogin}
+          disabled={isLoading}
+          className={`px-6 py-3 rounded font-bold flex items-center gap-2 transition
+            ${isLoading ? 'bg-gray-600 cursor-wait' : 'bg-white text-gray-900 hover:bg-gray-200'}
+          `}
+        >
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="G"/>
+          {isLoading ? "Checking..." : "Sign in with Acropolis ID"}
         </button>
       ) : (
         <div className="w-full max-w-lg">
           <div className="flex justify-between items-center mb-4">
-            <span className="text-sm text-green-400">Verified: {user.email}</span>
-            <button onClick={() => { signOut(auth); setUser(null); }} className="text-xs text-red-400 hover:underline">Logout</button>
+            <span className="text-sm text-green-400 font-mono">User: {user.email}</span>
+            <button 
+              onClick={() => { signOut(auth); setUser(null); setStatus("Logged out"); setStatusType('normal'); }} 
+              className="text-xs text-red-400 hover:text-red-300 underline"
+            >
+              Logout
+            </button>
           </div>
+          <label className="text-sm text-gray-400 mb-1 block">Select Department:</label>
+           <select 
+             value={branch}
+             onChange={(e) => setBranch(e.target.value)}
+             className="w-full p-3 rounded bg-gray-800 border border-gray-700 text-white mb-4 focus:border-blue-500 outline-none"
+             disabled={!!finalProof || isLoading}
+           >
+             {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
+           </select>
 
           <textarea
-            className="w-full p-4 rounded bg-gray-800 border border-gray-700 text-white mb-4 focus:border-blue-500 outline-none"
+            className="w-full p-4 rounded bg-gray-800 border border-gray-700 text-white mb-4 focus:border-blue-500 outline-none transition disabled:opacity-50"
             rows={4}
             placeholder="Type your grievance here..."
             value={complaint}
             onChange={(e) => setComplaint(e.target.value)}
-            disabled={!!finalProof}
+            disabled={!!finalProof || isLoading} 
           />
 
           <div className="flex gap-4">
+            {/* BUTTON 1: GET SIGNATURE */}
             <button
               onClick={handleSign}
-              disabled={!!finalProof || !complaint}
-              className={`flex-1 py-3 rounded font-bold transition ${!!finalProof ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'}`}
+              disabled={!!finalProof || !complaint || isLoading}
+              className={`flex-1 py-3 rounded font-bold transition 
+                ${!!finalProof 
+                  ? 'bg-gray-700 text-gray-500 cursor-not-allowed' 
+                  : isLoading ? 'bg-blue-800 cursor-wait' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
             >
-              1. Get Blind Signature
+              {isLoading && !finalProof ? "Processing..." : "1. Get Blind Signature"}
             </button>
 
+            {/* BUTTON 2: SUBMIT */}
             {finalProof && (
               <button
                 onClick={handleSubmit}
-                className="flex-1 py-3 bg-green-600 rounded hover:bg-green-500 font-bold transition animate-pulse"
+                disabled={isLoading}
+                className={`flex-1 py-3 rounded font-bold text-white transition animate-pulse
+                  ${isLoading ? 'bg-green-800 cursor-wait' : 'bg-green-600 hover:bg-green-500'}`}
               >
-                2. Post to Board
+                {isLoading ? "Analyzing..." : "2. Post to Board"}
               </button>
             )}
           </div>
         </div>
       )}
 
-      <div className="mt-8 p-4 border border-gray-700 rounded w-full max-w-lg text-center bg-gray-800">
-        <p className="text-gray-300 text-sm">System Status: <span className="text-yellow-400 font-mono">{status}</span></p>
+      {/* STATUS BOX - Dynamic Colors */}
+      <div className={`mt-8 p-4 border rounded w-full max-w-lg text-center transition-all duration-300
+        ${statusType === 'error' ? 'border-red-500 bg-red-900/30' : 
+          statusType === 'success' ? 'border-green-500 bg-green-900/30' : 
+          'border-gray-600 bg-gray-800'}`}
+      >
+        <p className={`text-sm font-mono font-bold ${
+          statusType === 'error' ? 'text-red-400' : 
+          statusType === 'success' ? 'text-green-400' : 
+          'text-yellow-400'
+        }`}>
+          STATUS: {status}
+        </p>
       </div>
     </main>
   );
