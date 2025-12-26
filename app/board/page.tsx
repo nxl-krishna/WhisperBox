@@ -29,14 +29,14 @@ export default function Board() {
     const unsubscribe = auth.onAuthStateChanged(async (u) => {
       if (u) {
         // NOTE: Remove the comment below to enforce acropolis email restriction in production
-        if(u.email?.endsWith("@acropolis.in")) {
+        // if(u.email?.endsWith("@acropolis.in")) {
              setUser(u);
              await checkAdminStatus(u.email); 
              fetchComplaints("CSE"); 
-        } else {
-           alert("Only acropolis emails allowed");
-           signOut(auth);
-        }
+        // } else {
+        //    alert("Only acropolis emails allowed");
+        //    signOut(auth);
+        // }
       } else {
         setUser(null);
         setIsAdmin(false);
