@@ -18,10 +18,12 @@ export async function POST(request: Request) {
     }
 
     // 2. CRYPTO CHECK
+    const ticketId = `#GRV-${Math.floor(1000 + Math.random() * 9000)}`;
     const isValid = verifySignature(message, signature);
     if (!isValid) {
       return NextResponse.json({ error: 'Invalid Signature!' }, { status: 401 });
     }
+    
 
     // 3. AI MODERATION (USING GROQ / LLAMA 3) 🚀
     let analysis = "SAFE";
@@ -64,6 +66,7 @@ export async function POST(request: Request) {
     // 4. SAVE TO DB
     const db = getDb();
     await db.collection('complaints').add({
+      ticketId: ticketId,
       content: message,
       signature: signature,
       branch: branch,
@@ -71,11 +74,16 @@ export async function POST(request: Request) {
       timestamp: new Date(),
       status: 'Pending Review',
       aiProvider: 'Groq',
+      adminReply: '',
       upvotes: 0,
       upvotedBy: []
     });
 
-    return NextResponse.json({ success: true });
+   return NextResponse.json({ 
+        success: true, 
+        message: 'Complaint lodged!', 
+        ticketId: ticketId 
+    });
 
   } catch (error: any) {
     console.error("Server Error:", error);

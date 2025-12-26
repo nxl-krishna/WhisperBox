@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; //
 import { signInWithPopup, signOut } from "firebase/auth";
 import { auth, provider } from "../lib/firebaseClient"; 
 import { messageToHashInt, generateBlindingFactor, blindMessage, unblindSignature } from '@/lib/cryptoUtils';
@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
 
 
-const BRANCHES = ["CSE", "EE", "ME", "Civil", "Chemical", "General Admin"];
+const BRANCHES = ["CSE", "ECE", "ME", "Civil", "Chemical", "General Admin"];
 const convertToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -33,8 +33,22 @@ export default function Home() {
   // Crypto States
   const [finalProof, setFinalProof] = useState<string>('');
   const [rFactor, setRFactor] = useState<any>(null);
+  const [showWarning, setShowWarning] = useState(false);
+  useEffect(() => {
+    // Check agar user ne is session me warning dekh li hai ya nahi
+    const hasSeenWarning = sessionStorage.getItem("api_warning_seen");
+    if (!hasSeenWarning) {
+      setShowWarning(true); // First time show karo
+    }
+  }, []);
 
-  // 1. STRICT LOGIN FUNCTION (IITGN Only)
+  // ✨ 2. Close Warning Function
+  const handleCloseWarning = () => {
+    sessionStorage.setItem("api_warning_seen", "true"); // Browser ko batao ki dekh liya
+    setShowWarning(false);
+  };
+
+  // 1. STRICT LOGIN FUNCTION (college Only)
   const handleLogin = async () => {
     setStatus("Waiting for Google Login...");
     setStatusType('normal');
@@ -45,14 +59,14 @@ export default function Home() {
       const email = result.user.email;
 
       // 🛑 SECURITY CHECK: Domain Validation
-      // if (!email || !email.endsWith('@iiitvadodara.ac.in')) {
-      //   await signOut(auth); // Immediately kick out unauthorized user
-      //   setUser(null);
-      //   setStatus("❌ Access Denied: Only @iiitvadodara.ac.in emails are allowed!");
-      //   setStatusType('error');
-      //   setIsLoading(false);
-      //   return; // Stop execution here
-      // }
+      if (!email || !email.endsWith('@acropolis.in')) {
+        await signOut(auth); // Immediately kick out unauthorized user
+        setUser(null);
+        setStatus("❌ Access Denied: Only @acropolis.in emails are allowed!");
+        setStatusType('error');
+        setIsLoading(false);
+        return; // Stop execution here
+      }
 
       // Agar domain sahi hai:
       setUser(result.user);
@@ -119,6 +133,7 @@ export default function Home() {
 
   // 3. Submit (Groq AI Check)
   const handleSubmit = async () => {
+    if (isLoading) return;
     setStatus('🤖 AI Checking content for toxicity...');
     setStatus('📤 Uploading proof & checking content...');
     setStatusType('normal');
@@ -164,7 +179,7 @@ export default function Home() {
         setStatus(`⛔ Blocked: ${data.error}`); 
         setStatusType('error');
       } else {
-        setStatus('🚀 Complaint posted successfully to the Board!');
+        setStatus(`✅ Success! Your Ticket ID: ${data.ticketId} (Save this!)`);
         setStatusType('success');
         setComplaint(''); // Clear form
         setFinalProof(''); // Reset proof
@@ -182,11 +197,50 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-gray-900 text-white font-sans">
+      {showWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-gray-800 border-2 border-yellow-500 rounded-2xl p-6 max-w-md w-full shadow-2xl transform scale-100 animate-bounce-in">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-3xl">⚠️</span>
+              <h2 className="text-xl font-bold text-yellow-400">Testing Mode Active</h2>
+            </div>
+            
+            <div className="space-y-3 text-gray-300 text-sm mb-6">
+              <p>
+                Welcome to <span className="text-blue-400 font-bold">Whisper-Box</span> (Beta Version).
+              </p>
+              <p className="bg-yellow-900/30 p-3 rounded border-l-4 border-yellow-500">
+                <strong className="text-yellow-200 block mb-1">NOTE: API Usage Limit</strong>
+                We are using free-tier AI services. Please create complaints 
+                <span className="text-white font-bold underline decoration-red-500 decoration-2 underline-offset-2 ml-1">ONLY for genuine testing</span>. 
+                Excessive spamming may exhaust the API quota for others.
+              </p>
+              <ul className="list-disc pl-5 text-gray-400">
+                <li>Don't click "Submit" repeatedly.</li>
+                <li>Wait for the loading circle to finish.</li>
+                <li>the website may include the minor bugs so take it easy</li>
+              </ul>
+            </div>
+
+            <button 
+              onClick={handleCloseWarning}
+              className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 rounded-xl transition transform active:scale-95"
+            >
+              I Understand, Continue to App
+            </button>
+          </div>
+        </div>
+      )}
       <h1 className="text-4xl font-bold mb-2 text-blue-400">Whisper-Box 🔒</h1>
       
-      <a href="/board" className="text-blue-300 hover:text-blue-100 underline text-sm mb-6">
-        View Public Board &rarr;
-      </a>
+      <div className="flex gap-6 mb-6 text-sm">
+        <a href="/board" className="text-blue-300 hover:text-blue-100 underline hover:scale-105 transition">
+          View Public Board &rarr;
+        </a>
+        <a href="/track" className="text-purple-300 hover:text-purple-100 underline hover:scale-105 transition">
+          Track Your Complaint 🕵️‍♂️ &rarr;
+        </a>
+      </div>
       
       <p className="mb-8 text-gray-400">Acropolis Anonymous Grievance System</p>
       

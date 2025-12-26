@@ -2,32 +2,41 @@
 import { useState, useEffect } from 'react';
 import { signInWithPopup, signOut } from "firebase/auth";
 import { auth, provider, db } from "@/lib/firebaseClient"; 
-import { collection, query, where, getDocs, orderBy, doc, updateDoc, arrayUnion, arrayRemove, increment, getDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, orderBy, doc, updateDoc, arrayUnion, arrayRemove, increment } from "firebase/firestore";
+// 📊 Chart Imports
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
+import { Bar } from 'react-chartjs-2';
 
-const BRANCHES = ["CSE", "EE", "ME", "Civil", "Chemical", "General Admin"];
-// ✨ New: Status Options define kar liye
+// Register Chart Components
+ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
+
+const BRANCHES = ["CSE", "ECE", "ME", "Civil", "Chemical", "General Admin"];
 const STATUS_OPTIONS = ["Pending Review", "In Progress", "Resolved", "Rejected"];
 
 export default function Board() {
   const [user, setUser] = useState<any>(null);
-  const [isAdmin, setIsAdmin] = useState(false); // ✨ New State to track Admin
+  const [isAdmin, setIsAdmin] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState("CSE");
   const [complaints, setComplaints] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null); // For loading states on specific buttons
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  
+  // 📊 Analytics State
+  const [stats, setStats] = useState<{[key: string]: number}>({ "Pending Review": 0, "In Progress": 0, "Resolved": 0, "Rejected": 0 });
 
-  // 1. Check Login & Admin Status on Load
+  // 1. Check Login & Admin Status
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (u) => {
       if (u) {
-        // if(u.email?.endsWith("@iitgn.ac.in")) {
+        // NOTE: Remove the comment below to enforce acropolis email restriction in production
+        if(u.email?.endsWith("@acropolis.in")) {
              setUser(u);
-             await checkAdminStatus(u.email); // ✨ Check if user is Board Member
+             await checkAdminStatus(u.email); 
              fetchComplaints("CSE"); 
-        // } else {
-        //     alert("Only IITGN emails allowed");
-        //     signOut(auth);
-        // }
+        } else {
+           alert("Only acropolis emails allowed");
+           signOut(auth);
+        }
       } else {
         setUser(null);
         setIsAdmin(false);
@@ -41,23 +50,16 @@ export default function Board() {
     try { await signInWithPopup(auth, provider); } catch (e) { console.error(e); }
   };
 
-  // ✨ New: Helper to check Admin Role
   const checkAdminStatus = async (email: string | null) => {
     if (!email) return;
     try {
-      // Check if email exists in 'board_members' collection
       const q = query(collection(db, "board_members"), where("email", "==", email));
       const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        setIsAdmin(true); // User is Admin!
-        console.log("Welcome Board Member!");
-      }
-    } catch (e) {
-      console.error("Admin Check Failed", e);
-    }
+      if (!querySnapshot.empty) setIsAdmin(true);
+    } catch (e) { console.error(e); }
   };
 
-  // 2. Fetch Complaints
+  // 2. Fetch Complaints & Calculate Stats
   const fetchComplaints = async (branch: string) => {
     setLoading(true);
     setSelectedBranch(branch);
@@ -72,6 +74,15 @@ export default function Board() {
       const querySnapshot = await getDocs(q);
       const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setComplaints(data);
+
+      // 📊 Calculate Stats for Chart (Only needed if Admin)
+      const newStats: any = { "Pending Review": 0, "In Progress": 0, "Resolved": 0, "Rejected": 0 };
+      data.forEach((c: any) => {
+        const s = c.status || "Pending Review";
+        if (newStats[s] !== undefined) newStats[s]++;
+      });
+      setStats(newStats);
+
     } catch (e) {
       console.error("Fetch Error:", e);
     } finally {
@@ -79,7 +90,7 @@ export default function Board() {
     }
   };
 
-  // 3. Upvote Logic (Same as before)
+  // 3. Upvote Logic
   const handleUpvote = async (complaintId: string, currentUpvotes: number, upvotedBy: string[]) => {
     if (!user) return;
     setActionLoading(complaintId); 
@@ -98,33 +109,55 @@ export default function Board() {
     finally { setActionLoading(null); }
   };
 
-  // ✨ 4. New: Handle Status Change (Admin Only)
-  const handleStatusChange = async (complaintId: string, newStatus: string) => {
-    if (!isAdmin) return; // Double security check
+  // 4. ✨ Handle Admin Updates (Status & Reply)
+  const handleAdminUpdate = async (complaintId: string, newStatus: string, newReply: string) => {
+    if (!isAdmin) return;
     
-    // Optimistic Update (UI pe turant dikhao)
+    // Optimistic UI Update
     const updatedList = complaints.map(c => 
-        c.id === complaintId ? { ...c, status: newStatus } : c
+        c.id === complaintId ? { ...c, status: newStatus, adminReply: newReply } : c
     );
     setComplaints(updatedList);
 
+    // Update Stats locally for immediate chart refresh
+    // (Simplification: Just re-fetching is safer, but this is faster)
+    
     try {
         const docRef = doc(db, "complaints", complaintId);
-        await updateDoc(docRef, { status: newStatus });
-        console.log("Status Updated to", newStatus);
+        await updateDoc(docRef, { 
+            status: newStatus,
+            adminReply: newReply
+        });
+        // Refresh to ensure stats sync
+        fetchComplaints(selectedBranch);
     } catch (error) {
-        console.error("Status Update Failed:", error);
-        alert("Failed to update status. Do you have permission?");
-        fetchComplaints(selectedBranch); // Revert on error
+        console.error("Update Failed:", error);
+        alert("Update failed.");
     }
+  };
+
+  // 📊 Chart Data Configuration
+  const barChartData = {
+    labels: Object.keys(stats),
+    datasets: [{
+      label: 'Complaints Status',
+      data: Object.values(stats),
+      backgroundColor: ['#F59E0B', '#3B82F6', '#10B981', '#EF4444'], // Yellow, Blue, Green, Red
+    }]
   };
 
   // Access Block
   if (!user) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white p-4 text-center">
+        <a 
+          href="/" 
+          className="absolute top-6 left-6 text-gray-400 hover:text-white hover:underline flex items-center gap-2 transition"
+        >
+          ← Back to Home
+        </a>
         <h1 className="text-4xl font-bold mb-4 text-blue-500">Public Grievance Board 📢</h1>
-        <button onClick={handleLogin} className="bg-white text-gray-900 px-8 py-3 rounded-full font-bold flex items-center gap-2 mx-auto">
+        <button onClick={handleLogin} className="bg-white text-gray-900 px-8 py-3 rounded-full font-bold flex items-center gap-2 mx-auto hover:bg-gray-200 transition">
            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5"/>
            Login with IITGN ID
         </button>
@@ -146,10 +179,23 @@ export default function Board() {
           </p>
         </div>
         <div className="flex gap-4">
+          <a href="/" className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition flex items-center gap-2">
+              🏠 Home
+            </a>
             <a href="/" className="px-4 py-2 bg-gray-800 rounded hover:bg-gray-700 transition">➕ New Complaint</a>
             <button onClick={() => signOut(auth)} className="text-red-400 hover:text-red-300">Logout</button>
         </div>
       </div>
+
+      {/* 📊 ANALYTICS SECTION (Admin Only) */}
+      {isAdmin && !loading && (
+        <div className="mb-8 p-6 bg-gray-800/50 border border-gray-700 rounded-xl">
+            <h2 className="text-xl font-bold mb-4 text-purple-400">📊 {selectedBranch} Analytics</h2>
+            <div className="h-64 w-full md:w-1/2 mx-auto">
+                <Bar data={barChartData} options={{ maintainAspectRatio: false }} />
+            </div>
+        </div>
+      )}
 
       {/* Filter Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-4 mb-4 scrollbar-hide">
@@ -185,74 +231,100 @@ export default function Board() {
 
               return (
                 <div key={c.id} className={`bg-gray-800 p-6 rounded-xl border shadow-lg flex flex-col ${c.status === 'Resolved' ? 'border-green-500/30' : 'border-gray-700'}`}>
-                  {/* Metadata */}
+                  
+                  {/* Metadata (Ticket ID & Date) */}
                   <div className="flex justify-between items-start mb-3">
-                    <span className="bg-blue-900/50 text-blue-300 text-[10px] px-2 py-1 rounded border border-blue-800 uppercase tracking-wider">{c.branch}</span>
+                    <div className="flex flex-col">
+                        <span className="bg-blue-900/50 text-blue-300 text-[10px] px-2 py-1 rounded border border-blue-800 uppercase tracking-wider w-fit">{c.branch}</span>
+                        <span className="text-xs text-gray-500 mt-1 font-mono">{c.ticketId || "#OLD-DATA"}</span>
+                    </div>
                     <span className="text-gray-500 text-xs">{new Date(c.timestamp?.seconds * 1000).toLocaleDateString()}</span>
                   </div>
 
                   {/* Content */}
                   <p className="text-gray-200 text-lg mb-4 flex-grow font-light">"{c.content}"</p>
 
-                  {/* Image Evidence */}
+                  {/* Image Evidence (Base64 Handling) */}
                   {c.imageUrl && (
                     <div className="mb-4 overflow-hidden rounded-lg border border-gray-600">
                       <img 
-                        src={`data:image/png;base64,${c.imageUrl.split(',')[1]}`} 
+                        // Handle both old URLs and new Base64 strings
+                        src={c.imageUrl.startsWith('http') ? c.imageUrl : `data:image/png;base64,${c.imageUrl.split(',')[1] || c.imageUrl}`} 
                         alt="Evidence" 
                         className="w-full h-40 object-cover hover:scale-105 transition duration-300 cursor-pointer"
                         onClick={() => {
                              const win = window.open();
-                             win?.document.write('<iframe src="' + c.imageUrl  + '" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>');
+                             win?.document.write('<iframe src="' + (c.imageUrl.startsWith('http') ? c.imageUrl : `data:image/png;base64,${c.imageUrl.split(',')[1] || c.imageUrl}`) + '" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>');
                         }}
                       />
                     </div>
                   )}
 
-                  {/* Footer: Admin Controls or Status View */}
-                  <div className="border-t border-gray-700 pt-4 flex justify-between items-center gap-4">
-                    
-                    {/* UPVOTE BUTTON */}
-                    <button 
-                        onClick={() => handleUpvote(c.id, c.upvotes || 0, c.upvotedBy || [])}
-                        disabled={actionLoading === c.id}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${
-                            isUpvoted 
-                            ? 'bg-blue-600/20 text-blue-400 border border-blue-500/50' 
-                            : 'bg-gray-700/50 text-gray-400 hover:bg-gray-700'
-                        }`}
-                    >
-                        <span>{isUpvoted ? '▲' : '△'}</span>
-                        <span className="font-bold">{c.upvotes || 0}</span>
-                    </button>
-
-                    {/* ✨ ADMIN ONLY: STATUS DROPDOWN ✨ */}
-                    {isAdmin ? (
+                  {/* Footer Logic: ADMIN vs STUDENT */}
+                  {isAdmin ? (
+                    <div className="mt-4 pt-4 border-t border-gray-700 bg-gray-900/30 p-3 rounded">
+                        <label className="text-xs text-purple-400 font-bold block mb-2">🛡️ Admin Controls:</label>
+                        
+                        {/* 1. Status Dropdown */}
                         <select 
                             value={c.status || "Pending Review"}
-                            onChange={(e) => handleStatusChange(c.id, e.target.value)}
-                            className={`text-xs px-2 py-1.5 rounded font-mono outline-none border border-gray-600 cursor-pointer ${statusColor}`}
+                            onChange={(e) => handleAdminUpdate(c.id, e.target.value, c.adminReply || "")}
+                            className={`w-full text-sm p-2 rounded border border-gray-600 mb-3 outline-none cursor-pointer ${statusColor.replace('text-', 'text-white ')}`}
                         >
                             {STATUS_OPTIONS.map(opt => (
-                                <option key={opt} value={opt} className="bg-gray-800 text-white">
-                                    {opt}
-                                </option>
+                                <option key={opt} value={opt} className="bg-gray-800 text-white">{opt}</option>
                             ))}
                         </select>
-                    ) : (
-                        // Regular Student View (Badge Only)
-                        <span className={`text-xs px-2 py-1 rounded font-mono ${statusColor}`}>
-                            {c.status || "Pending Review"}
-                        </span>
-                    )}
 
-                  </div>
+                        {/* 2. Admin Reply Input */}
+                        <input 
+                            type="text"
+                            defaultValue={c.adminReply || ""}
+                            onBlur={(e) => handleAdminUpdate(c.id, c.status, e.target.value)}
+                            placeholder="Type reply to student..."
+                            className="w-full bg-gray-800 text-white text-sm p-2 rounded border border-gray-600 focus:border-blue-500 outline-none"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-1 text-right">*Click outside to save reply</p>
+                    </div>
+                  ) : (
+                    // STUDENT VIEW
+                    <div className="border-t border-gray-700 pt-4">
+                        <div className="flex justify-between items-center gap-4">
+                            {/* Upvote Button */}
+                            <button 
+                                onClick={() => handleUpvote(c.id, c.upvotes || 0, c.upvotedBy || [])}
+                                disabled={actionLoading === c.id}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${
+                                    isUpvoted ? 'bg-blue-600/20 text-blue-400 border border-blue-500/50' : 'bg-gray-700/50 text-gray-400 hover:bg-gray-700'
+                                }`}
+                            >
+                                <span>{isUpvoted ? '▲' : '△'}</span>
+                                <span className="font-bold">{c.upvotes || 0}</span>
+                            </button>
+
+                            {/* Status Badge */}
+                            <span className={`text-xs px-2 py-1 rounded font-mono ${statusColor}`}>
+                                {c.status || "Pending Review"}
+                            </span>
+                        </div>
+
+                        {/* Admin Reply Display */}
+                        {c.adminReply && (
+                            <div className="mt-3 text-xs bg-blue-900/20 p-3 rounded border-l-2 border-blue-500">
+                                <span className="font-bold text-blue-400 block mb-1">Admin Response:</span> 
+                                <span className="text-gray-300">"{c.adminReply}"</span>
+                            </div>
+                        )}
+                    </div>
+                  )}
+
                 </div>
               );
             })
           )}
         </div>
       )}
+      <a href="/" className="mt-8 text-gray-500 hover:text-white transition">← Back to Home</a>
     </div>
   );
 }

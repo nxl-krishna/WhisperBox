@@ -27,12 +27,12 @@ export async function POST(request: Request) {
     const userId = decodedToken.uid;
     const userEmail = decodedToken.email;
 
-    // Optional: Check Domain (Restrict to IITGN)
-    /*
-    if (!userEmail?.endsWith('@iitgn.ac.in')) {
-       return NextResponse.json({ error: 'Only IITGN students allowed.' }, { status: 403 });
+    // Optional: Check Domain 
+    
+    if (!userEmail?.endsWith('@acropolis.in')) {
+       return NextResponse.json({ error: 'Only acropolis students allowed.' }, { status: 403 });
     }
-    */
+    
 
     const db = getDb();
     const userRef = db.collection('voters').doc(userId);
