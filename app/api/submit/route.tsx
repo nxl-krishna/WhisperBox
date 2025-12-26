@@ -70,7 +70,9 @@ export async function POST(request: Request) {
       imageUrl: imageUrl || null,
       timestamp: new Date(),
       status: 'Pending Review',
-      aiProvider: 'Groq'
+      aiProvider: 'Groq',
+      upvotes: 0,
+      upvotedBy: []
     });
 
     return NextResponse.json({ success: true });
