@@ -233,7 +233,7 @@ export default function Home() {
       
       <div className="flex gap-6 mb-6 text-sm">
         <a href="/board" className="text-blue-300 hover:text-blue-100 underline hover:scale-105 transition">
-          View Public Board &rarr;
+          View Public Complaints &rarr;
         </a>
         <a href="/track" className="text-purple-300 hover:text-purple-100 underline hover:scale-105 transition">
           Track Your Complaint 🕵️‍♂️ &rarr;
@@ -260,7 +260,7 @@ export default function Home() {
                 onClick={() => router.push('/board')}
                 className="text-gray-500 hover:text-white text-sm underline underline-offset-4 hover:scale-105 transition mt-2"
             >
-                Are you a Board Member? Login Here
+                Are you a admin? Login Here
             </button>
         </div>
       ) : (
