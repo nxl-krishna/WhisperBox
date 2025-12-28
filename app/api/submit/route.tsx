@@ -1,100 +1,79 @@
-// app/api/submit/route.ts
 import { NextResponse } from 'next/server';
-import { verifySignature } from '@/lib/cryptoUtils'; 
+import { verifySignature, messageToHashInt } from '@/lib/cryptoUtils'; 
 import { getDb } from '@/lib/firebaseAdmin';
-import Groq from "groq-sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Initialize Groq
-const groq = new Groq({ apiKey: process.env.NEXT_PUBLIC_GROQ_API_KEY});
+// Initialize Gemini AI
+const genAI = new GoogleGenerativeAI(process.env.GROQ_API_KEY || "YOUR_API_KEY"); 
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { message, signature,branch,imageUrl } = body;
+    const { message, signature, branch, imageUrl } = body;
 
-    // 1. DATA CHECK
-    if (!message || !signature || !branch) {
-      return NextResponse.json({ error: 'Missing data' }, { status: 400 });
-    }
-
+    // --- 1. DEBUGGING LOGS (Console mein dikhenge) ---
     console.log("----- DEBUGGING SUBMIT -----");
     console.log("Received Message:", message);
-    console.log("Received Signature:", signature);
+    console.log("Received Signature:", signature ? signature.substring(0, 20) + "..." : "null");
 
+    // --- 2. CRYPTO VERIFICATION ---
+    // Pehle message ko hash number mein convert karo
+    const messageInt = messageToHashInt(message); 
     
+    // Phir verify karo (Sirf EK BAAR declare kiya hai 'isValid')
+    const isValid = verifySignature(signature, messageInt);
     
+    console.log("Is Signature Valid?", isValid);
 
-    // 2. CRYPTO CHECK
-    const ticketId = `#GRV-${Math.floor(1000 + Math.random() * 9000)}`;
-    const isValid = verifySignature(message, signature);
     if (!isValid) {
-       console.error("❌ Signature Mismatch!");
-      return NextResponse.json({ error: "Unauthorized: Invalid Token/Signature" }, { status: 401 });
+      console.error("❌ Signature Mismatch!");
+      return NextResponse.json({ error: "Unauthorized: Invalid Token/Signature. Don't edit text after signing." }, { status: 401 });
     }
-    
 
-    // 3. AI MODERATION (USING GROQ / LLAMA 3) 🚀
-    let analysis = "SAFE";
-    
+    // --- 3. AI TOXICITY CHECK (Gemini) ---
     try {
-      const completion = await groq.chat.completions.create({
-        messages: [
-          {
-            role: "system",
-            content: "You are a content moderator. Check the text for hate speech, severe profanity, or toxicity. Reply STRICTLY with 'SAFE' or 'UNSAFE'."
-          },
-          {
-            role: "user",
-            content: message,
-          },
-        ],
-        model: "llama-3.3-70b-versatile", // Super fast & Free tier friendly
-      });
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+      const prompt = `Analyze this student complaint for severe toxicity, hate speech, or explicit abuse. 
+      If it is safe/constructive criticism, reply "SAFE". 
+      If it contains severe abuse, reply "UNSAFE".
+      Complaint: "${message}"`;
 
-      analysis = completion.choices[0]?.message?.content?.trim().toUpperCase() || "SAFE";
-      console.log(`[Groq AI] Verdict: ${analysis}`);
-      // app/api/submit/route.tsx
+      const result = await model.generateContent(prompt);
+      const verdict = result.response.text().trim().toUpperCase();
 
-    if (analysis.includes("UNSAFE")) {
-      return NextResponse.json({ 
-        // Ye message frontend pe dikhega 👇
-        error: '⚠️ Request Rejected: Abusive language or toxic content is not allowed.' 
-      }, { status: 400 });
-    }
-
+      if (verdict.includes("UNSAFE")) {
+        return NextResponse.json({ error: "Message rejected by AI (Toxicity detected)" }, { status: 400 });
+      }
     } catch (aiError) {
-      console.error("Groq Check Failed:", aiError);
-      // Fail Open: Agar API fail hui to allow kar do temporarily
+      console.error("AI Check Failed (Skipping):", aiError);
+      // Fail-open: Agar AI down hai, toh message jaane do (Demo ke liye)
     }
 
-    if (analysis.includes("UNSAFE")) {
-      return NextResponse.json({ error: 'Content Flagged: Toxic content detected.' }, { status: 400 });
-    }
-
-    // 4. SAVE TO DB
+    // --- 4. SAVE TO DATABASE ---
+    const ticketId = `#GRV-${Math.floor(1000 + Math.random() * 9000)}`;
     const db = getDb();
+    
     await db.collection('complaints').add({
       ticketId: ticketId,
       content: message,
-      signature: signature,
       branch: branch,
-      imageUrl: imageUrl || null,
+      signature: signature,
+      imageUrl: imageUrl || null, 
       timestamp: new Date(),
       status: 'Pending Review',
-      aiProvider: 'Groq',
       adminReply: '',
       upvotes: 0,
-      upvotedBy: []
+      upvotedBy: [] 
     });
 
-   return NextResponse.json({ 
+    return NextResponse.json({ 
         success: true, 
-        message: 'Complaint lodged!', 
+        message: 'Complaint lodged successfully!', 
         ticketId: ticketId 
     });
 
   } catch (error: any) {
     console.error("Server Error:", error);
-    return NextResponse.json({ error: 'Submission failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Submission failed: ' + error.message }, { status: 500 });
   }
 }
