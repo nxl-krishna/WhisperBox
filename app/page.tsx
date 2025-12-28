@@ -7,6 +7,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "../lib/firebaseClient";
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
+import { useRouter } from 'next/navigation';
 
 
 const BRANCHES = ["CSE", "ECE", "ME", "Civil", "Chemical", "General Admin"];
@@ -24,6 +25,7 @@ export default function Home() {
   const [complaint, setComplaint] = useState('');
   const [branch, setBranch] = useState(BRANCHES[0]);
   const [image, setImage] = useState<File | null>(null);
+  const router = useRouter();
 
   // UI States
   const [status, setStatus] = useState('Idle');
