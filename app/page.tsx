@@ -67,6 +67,14 @@ export default function Home() {
     try {
       const result = await signInWithPopup(auth, provider);
       const email = result.user.email;
+        if (!email || !email.endsWith('@acropolis.in')) {
+        await signOut(auth);
+        setUser(null);
+        setStatus("❌ Access Denied: Only Acropolis emails allowed!");
+        setStatusType('error');
+        setIsLoading(false);
+        return;
+      }
 
       // Agar domain sahi hai:
       setUser(result.user);
