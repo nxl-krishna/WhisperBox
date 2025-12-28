@@ -263,6 +263,12 @@ export default function Home() {
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="G"/>
           {isLoading ? "Checking..." : "Sign in with Acropolis ID"}
         </button>
+        <button
+            onClick={() => router.push('/board')}
+            className="text-gray-500 hover:text-white text-sm underline underline-offset-4 hover:scale-105 transition mt-2"
+          >
+            Are you a Board Member? Login Here
+          </button>
       ) : (
         <div className="w-full max-w-lg">
           <div className="flex justify-between items-center mb-4">
