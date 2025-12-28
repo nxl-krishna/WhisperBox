@@ -159,7 +159,7 @@ export default function Board() {
         <h1 className="text-4xl font-bold mb-4 text-blue-500">Public Grievance Board 📢</h1>
         <button onClick={handleLogin} className="bg-white text-gray-900 px-8 py-3 rounded-full font-bold flex items-center gap-2 mx-auto hover:bg-gray-200 transition">
            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5"/>
-           Login with IITGN ID
+           Login with acropolis id /Admin ID 
         </button>
       </div>
     );
