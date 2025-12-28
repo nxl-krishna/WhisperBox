@@ -106,7 +106,7 @@ export default function Home() {
     
     try {
       const token = await user.getIdToken(); 
-      const messageInt = messageToHashInt(complaint);
+      const messageInt = messageToHashInt(complaint.trim());
       const r = generateBlindingFactor();
       setRFactor(r);
       
@@ -176,7 +176,7 @@ export default function Home() {
       const res = await fetch('/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: complaint, signature: finalProof, branch: branch, imageUrl: imageString }),
+        body: JSON.stringify({ message: complaint.trim(), signature: finalProof, branch: branch, imageUrl: imageString }),
       });
 
       const data = await res.json();
