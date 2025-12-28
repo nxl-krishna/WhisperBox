@@ -4,14 +4,14 @@ import { getDb } from '@/lib/firebaseAdmin';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.GROQ_API_KEY || "YOUR_API_KEY"); 
+const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GROQ_API_KEY|| "YOUR_API_KEY"); 
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { message, signature, branch, imageUrl } = body;
 
-    // --- 1. DEBUGGING LOGS (Console mein dikhenge) ---
+    // --- 1. DEBUGGING LOGS ---
     console.log("----- DEBUGGING SUBMIT -----");
     console.log("Received Message:", message);
     console.log("Received Signature:", signature ? signature.substring(0, 20) + "..." : "null");
@@ -20,8 +20,8 @@ export async function POST(request: Request) {
     // Pehle message ko hash number mein convert karo
     const messageInt = messageToHashInt(message); 
     
-    // Phir verify karo (Sirf EK BAAR declare kiya hai 'isValid')
-    const isValid = verifySignature(signature, messageInt);
+    // 👇 FIX: .toString() add kiya kyunki verifySignature string maang raha hai
+    const isValid = verifySignature(signature, messageInt.toString());
     
     console.log("Is Signature Valid?", isValid);
 
@@ -39,7 +39,8 @@ export async function POST(request: Request) {
       Complaint: "${message}"`;
 
       const result = await model.generateContent(prompt);
-      const verdict = result.response.text().trim().toUpperCase();
+      const response = await result.response;
+      const verdict = response.text().trim().toUpperCase();
 
       if (verdict.includes("UNSAFE")) {
         return NextResponse.json({ error: "Message rejected by AI (Toxicity detected)" }, { status: 400 });
