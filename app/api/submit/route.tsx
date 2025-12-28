@@ -21,22 +21,15 @@ export async function POST(request: Request) {
     console.log("Received Message:", message);
     console.log("Received Signature:", signature);
 
-    // Yahan check karo ki verifySignature kya bol raha hai
-    const messageInt = messageToHashInt(message); // Ensure ye import hai
-    const isValid = verifySignature(signature, messageInt);
     
-    console.log("Is Valid?", isValid);
-
-    if (!isValid) {
-      console.error("❌ Signature Mismatch!");
-      return NextResponse.json({ error: "Unauthorized: Invalid Token/Signature" }, { status: 401 });
-    }
+    
 
     // 2. CRYPTO CHECK
     const ticketId = `#GRV-${Math.floor(1000 + Math.random() * 9000)}`;
     const isValid = verifySignature(message, signature);
     if (!isValid) {
-      return NextResponse.json({ error: 'Invalid Signature!' }, { status: 401 });
+       console.error("❌ Signature Mismatch!");
+      return NextResponse.json({ error: "Unauthorized: Invalid Token/Signature" }, { status: 401 });
     }
     
 
