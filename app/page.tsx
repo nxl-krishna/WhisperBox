@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react'; //
+import { useState, useEffect } from 'react'; 
 import { signInWithPopup, signOut } from "firebase/auth";
 import { auth, provider } from "../lib/firebaseClient"; 
 import { messageToHashInt, generateBlindingFactor, blindMessage, unblindSignature } from '@/lib/cryptoUtils';
@@ -8,7 +8,6 @@ import { storage } from "../lib/firebaseClient";
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
 import { useRouter } from 'next/navigation';
-
 
 const BRANCHES = ["CSE", "ECE", "ME", "Civil", "Chemical", "General Admin"];
 const convertToBase64 = (file: File): Promise<string> => {
@@ -36,6 +35,7 @@ export default function Home() {
   const [finalProof, setFinalProof] = useState<string>('');
   const [rFactor, setRFactor] = useState<any>(null);
   const [showWarning, setShowWarning] = useState(false);
+
   useEffect(() => {
     // Check agar user ne is session me warning dekh li hai ya nahi
     const hasSeenWarning = sessionStorage.getItem("api_warning_seen");
@@ -43,7 +43,8 @@ export default function Home() {
       setShowWarning(true); // First time show karo
     }
   }, []);
-    useEffect(() => {
+
+  useEffect(() => {
     if (finalProof) {
       setFinalProof(''); // Reset signature
       setStatus('⚠️ Text changed. Please Sign again.');
@@ -66,16 +67,6 @@ export default function Home() {
     try {
       const result = await signInWithPopup(auth, provider);
       const email = result.user.email;
-
-      // 🛑 SECURITY CHECK: Domain Validation
-      // if (!email || !email.endsWith('@acropolis.in')) {
-      //   await signOut(auth); // Immediately kick out unauthorized user
-      //   setUser(null);
-      //   setStatus("❌ Access Denied: Only @acropolis.in emails are allowed!");
-      //   setStatusType('error');
-      //   setIsLoading(false);
-      //   return; // Stop execution here
-      // }
 
       // Agar domain sahi hai:
       setUser(result.user);
@@ -144,7 +135,6 @@ export default function Home() {
   const handleSubmit = async () => {
     if (isLoading) return;
     setStatus('🤖 AI Checking content for toxicity...');
-    setStatus('📤 Uploading proof & checking content...');
     setStatusType('normal');
     setIsLoading(true);
 
@@ -178,7 +168,7 @@ export default function Home() {
       const res = await fetch('/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: complaint, signature: finalProof,branch: branch,imageUrl: imageString }),
+        body: JSON.stringify({ message: complaint, signature: finalProof, branch: branch, imageUrl: imageString }),
       });
 
       const data = await res.json();
@@ -193,7 +183,6 @@ export default function Home() {
         setComplaint(''); // Clear form
         setFinalProof(''); // Reset proof
         setImage(null);// Reset image
-        // Optional: Reset R factor if needed
       }
 
     } catch (e: any) {
@@ -255,22 +244,25 @@ export default function Home() {
       
       {/* Login Section */}
       {!user ? (
-        <button 
-          onClick={handleLogin}
-          disabled={isLoading}
-          className={`px-6 py-3 rounded font-bold flex items-center gap-2 transition
-            ${isLoading ? 'bg-gray-600 cursor-wait' : 'bg-white text-gray-900 hover:bg-gray-200'}
-          `}
-        >
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="G"/>
-          {isLoading ? "Checking..." : "Sign in with Acropolis ID"}
-        </button>
-        <button
-            onClick={() => router.push('/board')}
-            className="text-gray-500 hover:text-white text-sm underline underline-offset-4 hover:scale-105 transition mt-2"
-          >
-            Are you a Board Member? Login Here
-          </button>
+        // 👇 WRAPPER DIV ADDED HERE TO FIX THE ERROR
+        <div className="flex flex-col items-center gap-4">
+            <button 
+            onClick={handleLogin}
+            disabled={isLoading}
+            className={`px-6 py-3 rounded font-bold flex items-center gap-2 transition
+                ${isLoading ? 'bg-gray-600 cursor-wait' : 'bg-white text-gray-900 hover:bg-gray-200'}
+            `}
+            >
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="G"/>
+            {isLoading ? "Checking..." : "Sign in with Acropolis ID"}
+            </button>
+            <button
+                onClick={() => router.push('/board')}
+                className="text-gray-500 hover:text-white text-sm underline underline-offset-4 hover:scale-105 transition mt-2"
+            >
+                Are you a Board Member? Login Here
+            </button>
+        </div>
       ) : (
         <div className="w-full max-w-lg">
           <div className="flex justify-between items-center mb-4">
