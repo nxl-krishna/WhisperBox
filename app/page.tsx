@@ -66,14 +66,14 @@ export default function Home() {
       const email = result.user.email;
 
       // 🛑 SECURITY CHECK: Domain Validation
-      if (!email || !email.endsWith('@acropolis.in')) {
-        await signOut(auth); // Immediately kick out unauthorized user
-        setUser(null);
-        setStatus("❌ Access Denied: Only @acropolis.in emails are allowed!");
-        setStatusType('error');
-        setIsLoading(false);
-        return; // Stop execution here
-      }
+      // if (!email || !email.endsWith('@acropolis.in')) {
+      //   await signOut(auth); // Immediately kick out unauthorized user
+      //   setUser(null);
+      //   setStatus("❌ Access Denied: Only @acropolis.in emails are allowed!");
+      //   setStatusType('error');
+      //   setIsLoading(false);
+      //   return; // Stop execution here
+      // }
 
       // Agar domain sahi hai:
       setUser(result.user);
