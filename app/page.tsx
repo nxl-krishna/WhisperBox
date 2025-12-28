@@ -41,6 +41,13 @@ export default function Home() {
       setShowWarning(true); // First time show karo
     }
   }, []);
+    useEffect(() => {
+    if (finalProof) {
+      setFinalProof(''); // Reset signature
+      setStatus('⚠️ Text changed. Please Sign again.');
+      setStatusType('normal');
+    }
+  }, [complaint]);
 
   // ✨ 2. Close Warning Function
   const handleCloseWarning = () => {
