@@ -1,80 +1,76 @@
 import { NextResponse } from 'next/server';
 import { verifySignature, messageToHashInt, KEYS } from '@/lib/cryptoUtils'; 
 import { getDb } from '@/lib/firebaseAdmin';
-import Groq from "groq-sdk"; // ✨ Import Groq
 import bigInt from "big-integer";
-
-// ✨ Initialize Groq
-const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY 
-});
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     let { message, signature, branch, imageUrl } = body;
 
-    // 🧹 FIX: Trim whitespace
+    // 1. Basic Cleaning
     message = message.trim();
+    console.log("📝 Demo Submission:", message.substring(0, 20) + "...");
 
-    console.log("\n----- 🕵️ DEBUGGING SIGNATURE -----");
-    console.log("1. Received Message:", `"${message}"`);
-
-    // --- CRYPTO VERIFICATION ---
+    // 2. Crypto Verification (Isse mat hatana, ye core feature hai)
     const calculatedHash = messageToHashInt(message);
     const sigInt = bigInt(signature);
     const decryptedHash = sigInt.modPow(KEYS.e, KEYS.n);
-
-    console.log("2. Backend Hash:", calculatedHash.toString().substring(0, 10));
-    console.log("3. Signature Hash:", decryptedHash.toString().substring(0, 10));
-
     const isValid = calculatedHash.equals(decryptedHash);
     
     if (!isValid) {
-      console.error("❌ Signature Mismatch!");
-      return NextResponse.json({ 
-        error: "Signature Mismatch! Don't edit text after signing." 
-      }, { status: 401 });
+      console.error("❌ Signature Mismatch");
+      return NextResponse.json({ error: "Invalid Signature. Don't edit text after signing." }, { status: 401 });
     }
 
-    // --- 🤖 AI TOXICITY CHECK (GROQ) ---
-    console.log("🤖 Starting AI Check via Groq...");
-    
-    try {
-      const completion = await groq.chat.completions.create({
-        messages: [
-          {
-            role: "system",
-            content: `You are a strict content moderator for a college grievance portal.
-            Rules:
-            1. If the text contains hate speech, severe abuse, sexual harassment, or threats -> Reply ONLY "UNSAFE".
-            2. If it is a genuine complaint, constructive criticism, or mild frustration -> Reply ONLY "SAFE".
-            3. Do not provide explanations, just the single word.`
-          },
-          {
-            role: "user",
-            content: `Analyze this complaint: "${message}"`
-          }
-        ],
-        model: "llama-3.3-70b-versatile", // ⚡ Super Fast Llama 3.3
-        temperature: 0,
-        max_tokens: 10,
-      });
+    // --- 3. AI CHECK (DEMO MODE: FAIL-OPEN) ---
+    // Agar AI chalega toh badhiya, nahi chalega toh ignore karke aage badhenge.
+    let aiPassed = true; // Default maan lo sab sahi hai
 
-      const verdict = completion.choices[0]?.message?.content?.trim().toUpperCase() || "SAFE";
-      console.log("🤖 AI Verdict:", verdict);
+    if (process.env.GROQ_API_KEY) {
+        console.log("🤖 Asking AI...");
+        try {
+            const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${process.env.GROQ_API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: "llama-3.3-70b-versatile",
+                    messages: [
+                        { role: "system", content: "Reply ONLY 'UNSAFE' if text contains severe hate speech. Else 'SAFE'." },
+                        { role: "user", content: `Analyze: "${message}"` }
+                    ],
+                    max_tokens: 10
+                })
+            });
 
-      if (verdict.includes("UNSAFE")) {
-        console.warn("⛔ Complaint Rejected by Groq AI");
+            if (aiResponse.ok) {
+                const aiData = await aiResponse.json();
+                const verdict = aiData.choices[0]?.message?.content?.trim().toUpperCase() || "SAFE";
+                console.log("🤖 Verdict:", verdict);
+
+                if (verdict.includes("UNSAFE")) {
+                    aiPassed = false; // Sirf tab roko jab AI explicitly mana kare
+                }
+            } else {
+                console.warn("⚠️ AI API Error (Ignoring for Demo):", await aiResponse.text());
+            }
+        } catch (e) {
+            console.warn("⚠️ AI Connection Failed (Ignoring for Demo)");
+        }
+    } else {
+        console.warn("⚠️ No API Key found (Skipping AI Check)");
+    }
+
+    // Agar AI ne pakda hai toh block karo (Feature dikhane ke liye)
+    if (!aiPassed) {
         return NextResponse.json({ error: "Message rejected: Toxic content detected." }, { status: 400 });
-      }
-
-    } catch (aiError: any) {
-      console.error("❌ AI Check Failed:", aiError.message);
-      // Fail-open: Agar AI down hai to complain jane do (Demo ke liye)
     }
 
-    // --- SAVE TO DATABASE ---
+    // --- 4. SAVE TO DB ---
+    // Agar AI fail hua ya pass hua, code yahan aayega hi aayega (unless Toxic tha)
     const ticketId = `#GRV-${Math.floor(1000 + Math.random() * 9000)}`;
     const db = getDb();
     
@@ -94,7 +90,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, ticketId });
 
   } catch (error: any) {
-    console.error("Server Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Server Error:", error.message);
+    return NextResponse.json({ error: "Submission Failed" }, { status: 500 });
   }
 }
