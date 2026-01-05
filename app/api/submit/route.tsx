@@ -27,14 +27,14 @@ export async function POST(request: Request) {
     // Agar AI chalega toh badhiya, nahi chalega toh ignore karke aage badhenge.
     let aiPassed = true; // Default maan lo sab sahi hai
 
-    if (process.env.GROQ_API_KEY) {
+    if (process.env.NEXT_PUBLIC_GROQ_API_KEY) {
         console.log("🤖 Asking AI...");
         try {
             const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "Authorization": `Bearer ${process.env.GROQ_API_KEY}`
+                    "Authorization": `Bearer ${process.env.NEXT_PUBLIC_GROQ_API_KEY}`
                 },
                 body: JSON.stringify({
                     model: "llama-3.3-70b-versatile",
